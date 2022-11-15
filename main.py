@@ -1,29 +1,14 @@
-import disnake
-from dotenv import dotenv_values
-import logging
-
-logger = logging.getLogger('disnake')
-logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename='disnake.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
-
-token = dotenv_values()["DISCORD_TOKEN"]
-bot = disnake.Client()
+from aiba import aiba
+from cogs.generate import Generate
+from cogs.misc import Misc
+from settings import token
 
 
-@bot.event
-async def on_ready():
-    print(f'We have logged in as {bot.user}')
+def register_cogs():
+    aiba.add_cog(Misc(bot=aiba))
+    aiba.add_cog(Generate(bot=aiba))
 
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-
-    if message.content.startswith('$hello'):
-        await message.channel.send('Hello!')
-
-
-bot.run(token)
+if __name__ == "__main__":
+    register_cogs()
+    aiba.run(token)
