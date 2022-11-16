@@ -9,13 +9,14 @@ class Generate(commands.Cog):
         self.bot = bot
 
     @commands.slash_command(description="Generate an AIArt image according to the given prompt")
-    async def generate(self, inter, prompt: str):
-        await inter.response.send_message(f"Processing `{prompt}` from {inter.author.mention}")
-        try:
-            embed = await generate(prompt=prompt, requestor=inter.author)
-            await inter.followup.send(embed=embed)
-        except ValueError as e:
-            await inter.followup.send(e)
+    async def generate(self, inter: disnake.ApplicationCommandInteraction, prompt: str):
+        await inter.response.send_message(f"Processing `{prompt}`, requested by {inter.author.mention}")
+        await generate(inter=inter, prompt=prompt, requestor=inter.author)
 
-        # (f"Here's what I generated for the prompt `{prompt}`!", files=images)
-
+    @commands.message_command(description="Generate an AIArt image with this message as a prompt")
+    async def artify(self, inter: disnake.ApplicationCommandInteraction):
+        prompt = inter.target.content
+        await inter.response.send_message(
+            f"Processing `{prompt}`, requested by {inter.author.mention}, original message by {inter.target.author.mention}"
+        )
+        await generate(inter=inter, prompt=prompt, requestor=inter.author)

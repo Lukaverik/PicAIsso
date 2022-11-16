@@ -1,3 +1,6 @@
-/outputs/*
+/outputs/*.png
 .env
 /__pycache__/
+.idea
+cogs/__pycache__/*
+cogs/disnake.log
