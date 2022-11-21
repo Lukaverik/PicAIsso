@@ -45,17 +45,17 @@ def resolve_queue_pos(queue_length: int):
             pos += "rd"
         case _:
             pos += "th"
-    return f"You are {pos} in queue."
+    return pos
 
 
-async def generate(inter, prompt: str, requestor: Union[User, Member]):
+async def generate(inter, prompt: str, requestor: Union[User, Member], cfg_scale: float = None, sample_steps: int = None):
     settings: GuildSettings = await SettingsCache.find_by_guild_id(guild_id=str(inter.guild_id))
     payload = {
         "prompt": prompt,
         "batch_size": 1,
         "neg_prompt": settings.neg_prompt,
-        "steps": settings.steps,
-        "cfg_scale": settings.cfg_scale,
+        "steps": sample_steps or settings.steps,
+        "cfg_scale": cfg_scale or settings.cfg_scale,
         "denoising_strength": settings.denoising_strength,
         "sampler_index": settings.sampler_index,
         "width": settings.width,

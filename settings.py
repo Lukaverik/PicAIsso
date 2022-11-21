@@ -27,6 +27,8 @@ class GuildSettings:
     sampler_index: SamplerIndices = "Euler"
     width: int = 512
     height: int = 512
+    cfg_override: bool = True
+    steps_override: bool = True
 
     def to_json(self):
         return self.__dict__
@@ -45,13 +47,15 @@ class SettingsCache:
             guild_data = data[guild]
             cls.by_guild[guild] = GuildSettings(
                 guild_id=guild,
-                neg_prompt=guild_data["neg_prompt"],
-                steps=guild_data["steps"],
-                cfg_scale=guild_data["cfg_scale"],
-                denoising_strength=guild_data["denoising_strength"],
-                sampler_index=guild_data["sampler_index"],
-                width=guild_data["width"],
-                height=guild_data["height"]
+                neg_prompt=guild_data.get("neg_prompt", ""),
+                steps=guild_data.get("steps", 20),
+                cfg_scale=guild_data.get("cfg_scale", 7.0),
+                denoising_strength=guild_data.get("denoising_strength", 0),
+                sampler_index=guild_data.get("sampler_index", "Euler"),
+                width=guild_data.get("width", 512),
+                height=guild_data.get("height", 512),
+                cfg_override=guild_data.get("cfg_override", True),
+                steps_override=guild_data.get("steps_override", True)
             )
         cls.populated = True
 

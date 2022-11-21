@@ -4,4 +4,5 @@
 .idea
 cogs/__pycache__/*
 disnake.log
-/data/*
+/data/settings.json
+/data/stats.json
