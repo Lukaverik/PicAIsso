@@ -3,4 +3,5 @@
 /__pycache__/
 .idea
 cogs/__pycache__/*
-cogs/disnake.log
+disnake.log
+/data/*
