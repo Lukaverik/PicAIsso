@@ -71,6 +71,8 @@ class Config(commands.Cog):
             title="Aiba Configuration",
             timestamp=datetime.now()
         )
+        embed.add_field(name="Visible Prompt Messages?", value=settings.visible_prompts, inline=True)
+        embed.add_field(name="Delete Prompt Messages?", value=settings.delete_prompts, inline=True)
         embed.add_field(name="Sample Steps", value=settings.steps, inline=True)
         embed.add_field(name="Sample Steps Override", value=settings.steps_override, inline=True)
         embed.add_field(name="CFG Scale", value=settings.cfg_scale, inline=True)
@@ -85,6 +87,24 @@ class Config(commands.Cog):
     @commands.default_member_permissions(administrator=True)
     async def update(self, inter: disnake.ApplicationCommandInteraction):
         pass
+
+    @update.sub_command(name="visible_prompts", description="Update whether prompt messages are visible.")
+    async def update_visible_prompts(self, inter:disnake.ApplicationCommandInteraction, new_visible_prompts: bool):
+        settings = await SettingsCache.find_by_guild_id(guild_id=str(inter.guild_id))
+        settings.visible_prompts = new_visible_prompts
+        await SettingsCache.update(settings=settings)
+        response = "visible" if new_visible_prompts else "invisible"
+        await inter.response.send_message(
+            f"{inter.author.mention} has set prompt messages to be {response} in this server by default.")
+
+    @update.sub_command(name="delete_prompts", description="Update whether prompt messages are deleted.")
+    async def update_delete_prompts(self, inter:disnake.ApplicationCommandInteraction, new_delete_prompts: bool):
+        settings = await SettingsCache.find_by_guild_id(guild_id=str(inter.guild_id))
+        settings.delete_prompts_prompts = new_delete_prompts
+        response = "to be deleted" if new_delete_prompts else "to not be deleted"
+        await SettingsCache.update(settings=settings)
+        await inter.response.send_message(
+            f"{inter.author.mention} has set prompt messages {response} in this server by default.")
 
     @update.sub_command(name="cfg_scale", description="Update this server's default CFG Scale")
     async def update_cfg_scale(

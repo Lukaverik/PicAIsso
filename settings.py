@@ -17,18 +17,36 @@ class SamplerIndices(Enum):
     euler = "Euler"
 
 
+class QueueHandler:
+    queue_length = 0
+
+    @classmethod
+    def increment(cls):
+        cls.queue_length += 1
+
+    @classmethod
+    def decrement(cls):
+        cls.queue_length -= 1
+
+    @classmethod
+    def get_length(cls):
+        return cls.queue_length
+
+
 @dataclass
 class GuildSettings:
     guild_id: str
-    neg_prompt: str = "blurry, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, artist name, bad eyes"
+    neg_prompt: str = "(blurry:2), lowres, bad anatomy, bad hands, (text:2), error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, artist name, bad eyes"
     steps: int = 20
     cfg_scale: int = 7
-    denoising_strength: float = 0
+    denoising_strength: float = 0.75
     sampler_index: SamplerIndices = "Euler"
     width: int = 512
     height: int = 512
     cfg_override: bool = True
     steps_override: bool = True
+    visible_prompts: bool = True
+    delete_prompts: bool = True
 
     def to_json(self):
         return self.__dict__
@@ -55,7 +73,9 @@ class SettingsCache:
                 width=guild_data.get("width", 512),
                 height=guild_data.get("height", 512),
                 cfg_override=guild_data.get("cfg_override", True),
-                steps_override=guild_data.get("steps_override", True)
+                steps_override=guild_data.get("steps_override", True),
+                visible_prompts=guild_data.get("visible_prompts", True),
+                delete_prompts=guild_data.get("delete_prompts", True)
             )
         cls.populated = True
 

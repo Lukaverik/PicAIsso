@@ -51,3 +51,16 @@ class Misc(commands.Cog):
                 field_val = "You have not used Aiba."
         embed = disnake.Embed(title=field_val, timestamp=datetime.now())
         await inter.response.send_message(embed=embed)
+
+    @commands.slash_command(name="patch_notes", description="Provides a description of the most recent changes to Aiba!")
+    async def patch_notes(self, inter: disnake.ApplicationCommandInteraction):
+        embed = disnake.Embed(
+            title="Aiba Patch Notes",
+            timestamp=datetime.now(),
+        )
+        embed.add_field(name="Last Update", value="November 27th, 2022")
+        embed.description = " - Added Img2Img Message Command, letting users change images according to a given prompt."
+        embed.description += "\n - Added a configuration to set whether prompt messages are visible to the whole server, or only the requestor by default."
+        embed.description += "\n - Added a configuration to set whether prompt messages will be deleted once Aiba has finished her image."
+        embed.description += "\n - Other minor bug fixes and improvements."
+        await inter.response.send_message(embed=embed)
