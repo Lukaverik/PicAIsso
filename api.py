@@ -1,101 +1,92 @@
+import os
 from datetime import datetime
 from io import BytesIO
-from typing import Union
-
 import PIL.Image
 import aiohttp
 import base64
 
 import disnake
 from PIL import PngImagePlugin
-from disnake import User, Member, InteractionResponseType
 
-from settings import base_url, SettingsCache, GuildSettings
-from util import load, flush, sanitized_file_name
+from models.guild import Guild
+from models.request import RequestType, Request, Img2ImgRequest, RequestStatus
+from models.user import User
+from models.view import ScoreView
+from util import sanitized_file_name, base_url, outputs_dir, Interaction
 
-stats_path = "../data/stats.json"
 
-
-async def record(guild: str, user: Union[User|Member]):
-    data = await load(path=stats_path)
-    if guild in list(data.keys()):
-        if user.name in list(data[guild].keys()):
-            data[guild][user.name] += 1
-        else:
-            data[guild][user.name] = 1
+async def generate(
+    inter: Interaction,
+    request: Request,
+    guild: Guild,
+    requestor: User,
+    original_author: User = None,
+):
+    if request.req_type == RequestType.img2img:
+        await img2img(
+            inter=inter,
+            request=request,
+            guild=guild,
+            requestor=requestor,
+        )
     else:
-        data[guild] = {user.name: 1}
-    await flush(path=stats_path, data=data)
+        await txt2img(
+            inter=inter,
+            request=request,
+            guild=guild,
+            requestor=requestor,
+            original_author=original_author,
+        )
 
 
-async def sorted_stats(guild: str):
-    data = await load(path=stats_path)
-    if guild not in data.keys():
-        return {}
-    else:
-        return {name: value for name, value in sorted(data[guild].items(), key=lambda item: item[1], reverse=True)}
-
-
-def resolve_queue_pos(queue_length: int):
-    pos = str(queue_length)
-    match(pos[-1]):
-        case "1":
-            pos += "st"
-        case "2":
-            pos += "nd"
-        case "3":
-            pos += "rd"
-        case _:
-            pos += "th"
-    return pos
-
-
-async def txt2img(inter: disnake.ApplicationCommandInteraction, prompt: str, requestor: Union[User, Member], cfg_scale: float = None, sample_steps: int = None, artify:bool=False):
-    settings: GuildSettings = await SettingsCache.find_by_guild_id(guild_id=str(inter.guild_id))
-    payload = {
-        "prompt": prompt + ", masterpiece, best quality",
-        "batch_size": 1,
-        "neg_prompt": settings.neg_prompt,
-        "steps": sample_steps or settings.steps,
-        "cfg_scale": cfg_scale or settings.cfg_scale,
-        "denoising_strength": settings.denoising_strength,
-        "sampler_index": settings.sampler_index,
-        "width": settings.width,
-        "height": settings.height,
-    }
+async def txt2img(
+    inter: disnake.ApplicationCommandInteraction,
+    request: Request,
+    guild: Guild,
+    requestor: User,
+    original_author: User = None,
+):
+    payload = guild.request_to_payload(req=request)
+    request.status = RequestStatus.in_progress
+    await request.save_changes()
     async with aiohttp.ClientSession() as session:
         start = datetime.now()
-        async with session.post(f"{base_url}/sdapi/v1/txt2img", json=payload) as response:
+        async with session.post(
+            f"{base_url}/sdapi/v1/txt2img", json=payload
+        ) as response:
             delta = datetime.now() - start
-            delta_string = f"{delta.seconds}.{delta.microseconds//10000} seconds"
             if response.status == 200:
+                request.status = RequestStatus.finished
+                request.runtime = float(f"{delta.seconds}.{delta.microseconds//10000}")
                 r = await response.json()
-                filename = sanitized_file_name(prompt, requestor.display_name)
-                # Image.open(BytesIO(base64.b64decode(r['images'][0]))).save(f"../outputs/{filename}")
-                embed = disnake.Embed(
-                    title=prompt[:256].title(),
-                    color=disnake.Colour.dark_teal(),
-                    timestamp=datetime.now(),
+                request.output_filename = sanitized_file_name(
+                    request.prompt, request.requestor_id
                 )
-                embed.add_field(name="Requestor", value=requestor.mention, inline=True)
-                if artify:
-                    embed.add_field(name="Original Author", value=inter.target.author.mention, inline=True)
-                embed.add_field(name="Generated in", value=delta_string, inline=True)
-                # embed.set_image(file=disnake.File(f"../outputs/{filename}"))
-                embed.set_image(file=disnake.File(filename=filename, fp=BytesIO(base64.b64decode(r['images'][0]))))
-                await inter.followup.send(embed=embed)
+                bio = BytesIO(base64.b64decode(r["images"][0]))
+                PIL.Image.open(bio).save(
+                    os.path.join(outputs_dir, request.output_filename)
+                )
+                embed = await request.get_output_embed()
+                await request.save_changes()
+                await inter.channel.send(
+                    embed=embed, view=ScoreView(request_id=request.request_id)
+                )
             else:
-                await inter.followup.send(f"Bad response received from Stable Diffusion API (Status: {response.status})")
+                request.status = RequestStatus.error
+                await request.save_changes()
+                await inter.channel.send(
+                    f"Bad response received from Stable Diffusion API (Status: {response.status})"
+                )
+    if guild.settings.delete_prompts:
+        await inter.delete_original_response()
 
 
-async def img2img(inter, image_url: str, prompt: str, requestor: Union[User, Member], denoising_strength: float, cfg_scale: float = None, sample_steps: int = None):
-    settings: GuildSettings = await SettingsCache.find_by_guild_id(guild_id=str(inter.guild_id))
+async def get_img_bytes(request: Img2ImgRequest):
     async with aiohttp.ClientSession() as session:
-        async with session.post(image_url) as response:
+        async with session.post(request.original_img_url) as response:
             BIO = BytesIO(await response.content.read())
             img = PIL.Image.open(BIO)
             with BytesIO() as output_bytes:
-
                 use_metadata = False
                 metadata = PngImagePlugin.PngInfo()
                 for key, value in img.info.items():
@@ -105,41 +96,49 @@ async def img2img(inter, image_url: str, prompt: str, requestor: Union[User, Mem
                 img.save(
                     output_bytes, "PNG", pnginfo=(metadata if use_metadata else None)
                 )
-                bytes_data = output_bytes.getvalue()
-    img_data = str(base64.b64encode(bytes_data))
-    payload = {
-        "init_images": [img_data],
-        "prompt": prompt + ", masterpiece, best quality",
-        "batch_size": 1,
-        "neg_prompt": settings.neg_prompt,
-        "steps": sample_steps or settings.steps,
-        "cfg_scale": cfg_scale or settings.cfg_scale,
-        "denoising_strength": denoising_strength or settings.denoising_strength,
-        "sampler_index": settings.sampler_index,
-        "width": settings.width,
-        "height": settings.height
-    }
+                return output_bytes.getvalue()
+
+
+async def img2img(
+    inter: disnake.ModalInteraction,
+    request: Img2ImgRequest,
+    guild: Guild,
+    requestor: User,
+):
+    request.status = RequestStatus.in_progress
+    await request.save_changes()
+    img_data = await get_img_bytes(request=request)
+    img_data = str(base64.b64encode(img_data))
+    payload = guild.request_to_payload(req=request, data=img_data)
     async with aiohttp.ClientSession() as session:
         start = datetime.now()
-        async with session.post(f"{base_url}/sdapi/v1/img2img", json=payload) as response:
+        async with session.post(
+            f"{base_url}/sdapi/v1/img2img", json=payload
+        ) as response:
             delta = datetime.now() - start
-            delta_string = f"{delta.seconds}.{delta.microseconds // 10000} seconds"
             if response.status == 200:
-                r = await response.json()
-                filename = sanitized_file_name(prompt, requestor.display_name)
-                # Image.open(BytesIO(base64.b64decode(r['images'][0]))).save(f"../outputs/{filename}")
-                embed = disnake.Embed(
-                    title=prompt[:256].title(),
-                    color=disnake.Colour.dark_teal(),
-                    timestamp=datetime.now(),
+                request.status = RequestStatus.finished
+                request.runtime = float(
+                    f"{delta.seconds}.{delta.microseconds // 10000}"
                 )
-                embed.add_field(name="Requestor", value=requestor.mention, inline=True)
-                embed.add_field(name="Generated in", value=delta_string, inline=True)
-                embed.add_field(name="Denoising Strength", value =denoising_strength or settings.denoising_strength)
-                # embed.set_image(file=disnake.File(f"../outputs/{filename}"))
-                embed.set_image(file=disnake.File(filename=filename, fp=BytesIO(base64.b64decode(r['images'][0]))))
-                embed.set_thumbnail(url=image_url)
-                await inter.followup.send(embed=embed)
+                r = await response.json()
+                request.output_filename = sanitized_file_name(
+                    request.prompt, request.requestor_id
+                )
+                bio = BytesIO(base64.b64decode(r["images"][0]))
+                PIL.Image.open(bio).save(
+                    os.path.join(outputs_dir, request.output_filename)
+                )
+                embed = await request.get_output_embed()
+                await request.save_changes()
+                await inter.channel.send(
+                    embed=embed, view=ScoreView(request_id=request.request_id)
+                )
             else:
-                await inter.followup.send(
-                    f"Bad response received from Stable Diffusion API (Status: {response.status})")
+                request.status = RequestStatus.error
+                await request.save_changes()
+                await inter.channel.send(
+                    f"Bad response received from Stable Diffusion API (Status: {response.status})"
+                )
+    if guild.settings.delete_prompts:
+        await inter.delete_original_response()

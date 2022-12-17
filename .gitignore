@@ -2,7 +2,8 @@
 .env
 /__pycache__/
 .idea
-cogs/__pycache__/*
+cogs/__pycache__/
+/models/__pycache__/
 disnake.log
 /data/settings.json
 /data/stats.json

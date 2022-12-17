@@ -4,7 +4,8 @@ import disnake
 from disnake.ext import commands
 
 import emotes
-from api import sorted_stats
+import util
+from util import Interaction
 
 
 class Misc(commands.Cog):
@@ -12,7 +13,7 @@ class Misc(commands.Cog):
         self.bot = bot
 
     @commands.slash_command(description="Sends a friendly greeting")
-    async def greet(self, inter):
+    async def greet(self, inter: Interaction):
         await inter.response.send_message("Hi, there! :wave:")
 
     @commands.Cog.listener()
@@ -20,47 +21,42 @@ class Misc(commands.Cog):
         if message.author == self.bot.user:
             return
 
-        if self.bot.user in message.mentions and "hello" in message.content.lower():
-            await message.add_reaction(emotes.wave)
-            await message.channel.send("Hi, there!")
+        if self.bot.user in message.mentions:
+            if "hello" in message.content.lower():
+                await message.add_reaction(emotes.wave)
+                await message.channel.send("Hi, there!")
+            if "good girl" in message.content.lower():
+                await message.add_reaction(emotes.flushed)
 
-    @commands.slash_command(name="top", description="Provides a list of the 10 people who have used the bot the most")
-    async def top_users(self, inter):
-        data = await sorted_stats(guild=str(inter.guild_id))
-        embed = disnake.Embed(
-            title="Most Frequent Users",
-            timestamp=datetime.now(),
-        )
-        top_users = list(data.keys())[:10]
-        for index, user in enumerate(top_users, 1):
-            embed.add_field(name=index, value=f"{user}: {data[user]}", inline=False)
-        await inter.response.send_message(embed=embed)
-
-    @commands.slash_command(name="usage", description="Provides stats on the user, or on a given user")
-    async def usage(self, inter, username=None):
-        data = await sorted_stats(guild=str(inter.guild_id))
-        if username:
-            if username in list(data.keys()):
-                field_val = f"{username} has used Aiba {data[username]} times."
-            else:
-                field_val = f"{username} has not used Aiba."
-        else:
-            if inter.author.name in list(data.keys()):
-                field_val = f"You have used Aiba {data[inter.author.name]} times."
-            else:
-                field_val = "You have not used Aiba."
-        embed = disnake.Embed(title=field_val, timestamp=datetime.now())
-        await inter.response.send_message(embed=embed)
-
-    @commands.slash_command(name="patch_notes", description="Provides a description of the most recent changes to Aiba!")
-    async def patch_notes(self, inter: disnake.ApplicationCommandInteraction):
+    @commands.slash_command(
+        name="patch_notes",
+        description="Provides a description of the most recent changes to Aiba!",
+    )
+    async def patch_notes(self, inter: Interaction):
         embed = disnake.Embed(
             title="Aiba Patch Notes",
             timestamp=datetime.now(),
         )
-        embed.add_field(name="Last Update", value="November 27th, 2022")
-        embed.description = " - Added Img2Img Message Command, letting users change images according to a given prompt."
-        embed.description += "\n - Added a configuration to set whether prompt messages are visible to the whole server, or only the requestor by default."
-        embed.description += "\n - Added a configuration to set whether prompt messages will be deleted once Aiba has finished her image."
+        embed.add_field(name="Last Update", value="December 16th, 2022")
+        embed.description = " - Restructured system framework, backend is more stable and streamlined now."
+        embed.description += (
+            "\n - Added and currently testing out a scoring sytem for requests."
+        )
+        embed.description += "\n - Prompts are now automatically cleaned (bad tags, those with weights higher than 1.75, are removed)"
+        embed.description += "\n - The tags `(masterpiece: 1.5)` and `(best quality: 1.5)` are now invisibily added to prompts by default."
+        embed.description += "\n\tThis can be configured on the server level, but currently no command exists to do so. Ask Luka if you want this changed for any reason."
+        embed.description += "\n - Added logging for guilds, users, and requests in a more accessible way in preparation for planned features."
         embed.description += "\n - Other minor bug fixes and improvements."
         await inter.response.send_message(embed=embed)
+
+    @commands.slash_command(name="pause")
+    async def pause(self, inter: Interaction):
+        if inter.author.id == 189101288083030017:
+            util.paused = True
+        await inter.response.send_message("Aiba is now paused.", ephemeral=True)
+
+    @commands.slash_command(name="unpause")
+    async def unpause(self, inter: Interaction):
+        if inter.author.id == 189101288083030017:
+            util.paused = False
+        await inter.response.send_message("Aiba is now unpaused.", ephemeral=True)
